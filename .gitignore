@@ -2,6 +2,11 @@
 logs
 *.log
 npm-debug.log*
+<<<<<<< HEAD
+=======
+yarn-debug.log*
+yarn-error.log*
+>>>>>>> 9091f8395a43925e046a2da9a2630d359d9cdfa0
 
 # Runtime data
 pids
