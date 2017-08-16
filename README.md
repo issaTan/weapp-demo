@@ -1,7 +1,7 @@
 # weapp-demo
 
 小程序 demo
-推荐使用[wepy](https://github.com/wepyjs/wepy) 和 [labrador] (https://github.com/maichong/labrador),这两个库已经封装得非常优雅了！
+推荐使用[wepy](https://github.com/wepyjs/wepy) 和 [labrador] (https://github.com/maichong/labrador) ,这两个库已经封装得非常优雅了！
 
 ## 特性：
 1. 可使用less
