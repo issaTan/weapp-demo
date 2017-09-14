@@ -1,4 +1,6 @@
 const gulp = require('gulp');
+const gulpSequence = require('gulp-sequence');
+const changed = require('gulp-changed');
 const gulpif = require('gulp-if');
 const watch = require('gulp-watch');
 const plumber = require('gulp-plumber');
@@ -16,52 +18,33 @@ const uglify = require('gulp-uglify');
 const imagemin = require('gulp-imagemin');
 const htmlmin = require('gulp-htmlmin');
 
+const config = require('./.gulprc.js');
+
 const prod = process.env.NODE_ENV === 'production';
 
-// gulp 输入源
-const jsSrc = ['src/**/**.js'];
-const lessSrc = ['src/**/**.less'];
-const imgSrc = ['src/imgs/*'];
-const wxmlSrc = ['src/**/**.wxml'];
-const jsonSrc = ['src/**/**.json'];
-const src = jsonSrc.concat(jsSrc).concat(lessSrc).concat(imgSrc).concat(wxmlSrc);
-
-// gulp 需要ignore 的文件配置 
-// TODO: issa 经过base64的所有图片都直接ignore
-const ignoreJsList = ['!src/utils/test.js'];
-const ignoreLessList = ['!src/styles/', '!src/styles/**', '!src/var.less'];
-const ignoreImageList = ['!src/imgs/icon', '!src/imgs/icon/**'];
-const ignoreWxmlList = [];
-const ignoreJsonList = [];
-
-const jsSource = jsSrc.concat(ignoreJsList);
-const lessSource = lessSrc.concat(ignoreLessList);
-const imageSource = imgSrc.concat(ignoreImageList);
-const wxmlSource = wxmlSrc.concat(ignoreWxmlList);
-const jsonSource = jsonSrc.concat(ignoreJsonList);
-
-const dest = 'dist/';
-
-gulp.task('clean', () => del(['dist/**']));
+gulp.task('clean', () => del([`${config.dest}/**`]));
 
 // 处理js 文件，包括eslint/babel/压缩
-gulp.task('buildJs', ['clean'], () =>
-  gulp.src(jsSource)
-    .pipe(plumber({
-      errorHandler: (err) => {
-        gutil.log(err.stack);
-      },
-    }))
-    .pipe(gulpif(!prod, sourcemaps.init()))
-    .pipe(eslint('.eslintrc.js'))
-    .pipe(eslint.format(friendlyFormatter))
-    .pipe(babel())
-    .pipe(gulpif(prod, uglify()))
-    .pipe(gulpif(!prod, sourcemaps.write()))
-    .pipe(gulp.dest(dest)));
+let buildJsSrc = config.source.js;
+gulp.task('buildJs', () => gulp.src(buildJsSrc, { base: config.base })
+  .pipe(changed(config.dest))
+  .pipe(plumber({
+    errorHandler: (err) => {
+      gutil.log(err.stack);
+    },
+  }))
+  .pipe(gulpif(!prod, sourcemaps.init()))
+  .pipe(eslint('.eslintrc.js'))
+  .pipe(eslint.format(friendlyFormatter))
+  .pipe(babel())
+  .pipe(gulpif(prod, uglify()))
+  .pipe(gulpif(!prod, sourcemaps.write()))
+  .pipe(gulp.dest(config.dest)));
 
 // 处理less文件
-gulp.task('buildLess', ['clean'], () => gulp.src(lessSource)
+let buildLessSrc = config.source.less;
+gulp.task('buildLess', () => gulp.src(buildLessSrc, { base: config.base })
+  .pipe(changed(config.dest))
   .pipe(plumber({
     errorHandler: (err) => {
       gutil.log(err.stack);
@@ -73,34 +56,83 @@ gulp.task('buildLess', ['clean'], () => gulp.src(lessSource)
   .pipe(gulpif(prod, cleanCss()))
   .pipe(gulpif(!prod, sourcemaps.write()))
   .pipe(rename((parsedPath) => { parsedPath.extname = '.wxss'; }))
-  .pipe(gulp.dest(dest)));
+  .pipe(gulp.dest(config.dest)));
+
+// 处理wxss 文件
+let buildWxssSrc = config.source.wxss;
+gulp.task('buildWxss', () => gulp.src(buildWxssSrc, { base: config.base })
+  .pipe(changed(config.dest))
+  .pipe(gulp.dest(config.dest)));
 
 // 处理图片
-gulp.task('buildImage', ['clean'], () => gulp.src(imageSource)
+let buildImageSrc = config.source.img;
+gulp.task('buildImage', () => gulp.src(buildImageSrc, { base: config.base })
+  .pipe(changed(config.dest))
   .pipe(plumber({
     errorHandler: (err) => {
       gutil.log(err.stack);
     },
   }))
   .pipe(imagemin())
-  .pipe(gulp.dest(dest)));
+  .pipe(gulp.dest(`${config.dest}`)));
 
 // 处理wxml
-gulp.task('buildWxml', ['clean'], () => gulp.src(wxmlSource)
+let buildWxmlSrc = config.source.wxml;
+gulp.task('buildWxml', () => gulp.src(buildWxmlSrc, { base: config.base })
+  .pipe(changed(config.dest))
   .pipe(plumber({
     errorHandler: (err) => {
       gutil.log(err.stack);
     },
   }))
   .pipe(gulpif(prod, htmlmin()))
-  .pipe(gulp.dest(dest)));
+  .pipe(gulp.dest(config.dest)));
 
-gulp.task('build', ['clean', 'buildWxml', 'buildImage', 'buildLess', 'buildJs'], () => gulp.src(jsonSource)
-  .pipe(gulp.dest(dest)));
+// 处理json
+let buildJsonSrc = config.source.json;
+gulp.task('buildJson', () => gulp.src(buildJsonSrc, { base: config.base })
+  .pipe(changed(config.dest))
+  .pipe(gulp.dest(config.dest)));
 
-gulp.task('watch', ['build'], () => watch(src, { debounceDelay: 200 }, (res) => {
-  gulp.start('build');
-  gutil.log(`File ${res.history} was ${res.event}, tasks running ...`);
+gulp.task('buildContent', (cb) => {
+  gulpSequence('buildImage', 'buildLess', 'buildJs', 'buildWxml', 'buildJson')(cb);
+});
+
+gulp.task('build', (cb) => {
+  gulpSequence('clean', 'buildContent')(cb);
+});
+
+gulp.task('watch', gulpSequence('buildContent', () => {
+  watch(config.source.js, { debounceDelay: 200 }, (res) => {
+    buildJsSrc = [`${config.base}/${res.relative}`];
+    gulp.start('buildJs');
+    gutil.log(`File ${res.history} was ${res.event}, tasks running ...`);
+  });
+  watch(config.source.less, { debounceDelay: 200 }, (res) => {
+    buildLessSrc = [`${config.base}/${res.relative}`];
+    gulp.start('buildLess');
+    gutil.log(`File ${res.history} was ${res.event}, tasks running ...`);
+  });
+  watch(config.source.wxss, { debounceDelay: 200 }, (res) => {
+    buildWxssSrc = [`${config.base}/${res.relative}`];
+    gulp.start('buildWxss');
+    gutil.log(`File ${res.history} was ${res.event}, tasks running ...`);
+  });
+  watch(config.source.img, { debounceDelay: 200 }, (res) => {
+    buildImageSrc = [`${config.base}/${res.relative}`];
+    gulp.start('buildImage');
+    gutil.log(`File ${res.history} was ${res.event}, tasks running ...`);
+  });
+  watch(config.source.wxml, { debounceDelay: 200 }, (res) => {
+    buildWxmlSrc = [`${config.base}/${res.relative}`];
+    gulp.start('buildWxml');
+    gutil.log(`File ${res.history} was ${res.event}, tasks running ...`);
+  });
+  watch(config.source.json, { debounceDelay: 200 }, (res) => {
+    buildJsonSrc = [`${config.base}/${res.relative}`];
+    gulp.start('buildJson');
+    gutil.log(`File ${res.history} was ${res.event}, tasks running ...`);
+  });
 }));
 
 gulp.task('default', ['watch']);
