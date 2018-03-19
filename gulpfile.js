@@ -1,6 +1,7 @@
 const gulp = require('gulp');
 const gulpSequence = require('gulp-sequence');
-const changed = require('gulp-changed');
+const newer = require('gulp-newer');
+const filter = require('gulp-filter');
 const gulpif = require('gulp-if');
 const watch = require('gulp-watch');
 const plumber = require('gulp-plumber');
@@ -16,7 +17,9 @@ const friendlyFormatter = require('eslint-friendly-formatter');
 const babel = require('gulp-babel');
 const uglify = require('gulp-uglify');
 const imagemin = require('gulp-imagemin');
-const htmlmin = require('gulp-htmlmin');
+const notify = require('gulp-notify');
+const through = require('through2');
+const path = require('path');
 
 const config = require('./.gulprc.js');
 
@@ -24,50 +27,83 @@ const prod = process.env.NODE_ENV === 'production';
 
 gulp.task('clean', () => del([`${config.dest}/**`]));
 
+function prefixStream(prefixText) {
+  const stream = through();
+  stream.write(prefixText);
+  return stream;
+}
+
+function gulpAddRequireRuntime() {
+  // 创建一个让每个文件通过的 stream 通道
+  return through.obj((file, enc, cb) => {
+    let prefixText = '';
+    let rel = path.relative(path.dirname(file.path), path.join(file.base, 'libs/regenerator/runtime.js'));
+    rel = rel.replace(/\\/g, '/');
+    if (rel === 'runtime.js') {
+      prefixText = new Buffer(prefixText); // 预先分配
+    } else {
+      prefixText = `var regeneratorRuntime = require("${rel}");`;
+      prefixText = new Buffer(prefixText); // 预先分配
+    }
+
+
+    if (file.isNull()) {
+      // 返回空文件
+      cb(null, file);
+    }
+    if (file.isBuffer()) {
+      file.contents = Buffer.concat([prefixText, file.contents]);
+    }
+    if (file.isStream()) {
+      file.contents = file.contents.pipe(prefixStream(prefixText));
+    }
+
+    cb(null, file);
+  });
+}
+
 // 处理js 文件，包括eslint/babel/压缩
 let buildJsSrc = config.source.js;
 gulp.task('buildJs', () => gulp.src(buildJsSrc, { base: config.base })
-  .pipe(changed(config.dest))
+  .pipe(newer(config.dest))
   .pipe(plumber({
     errorHandler: (err) => {
       gutil.log(err.stack);
     },
   }))
-  .pipe(gulpif(!prod, sourcemaps.init()))
+  .pipe(gulpif(prod, sourcemaps.init()))
   .pipe(eslint('.eslintrc.js'))
   .pipe(eslint.format(friendlyFormatter))
   .pipe(babel())
+  .pipe(gulpAddRequireRuntime())
   .pipe(gulpif(prod, uglify()))
-  .pipe(gulpif(!prod, sourcemaps.write()))
+  .pipe(gulpif(prod, sourcemaps.write()))
   .pipe(gulp.dest(config.dest)));
 
 // 处理less文件
-let buildLessSrc = config.source.less;
-gulp.task('buildLess', () => gulp.src(buildLessSrc, { base: config.base })
-  .pipe(changed(config.dest))
-  .pipe(plumber({
-    errorHandler: (err) => {
-      gutil.log(err.stack);
-    },
-  }))
-  .pipe(gulpif(!prod, sourcemaps.init()))
-  .pipe(less())
+const sourceLessSrc = config.source.less;
+const buildLessSrc = config.src.less;
+gulp.task('buildLess', () => gulp.src(sourceLessSrc, { base: config.base })
+  .pipe(filter(buildLessSrc))
+  .pipe(gulpif(prod, sourcemaps.init()))
+  .pipe(plumber({ errorHandler: notify.onError('Error:<%= error.message %>') }))
+  .pipe(less({ relativeUrls: true }))
   .pipe(base64({ extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg'], maxImageSize: 10000, debug: true }))
   .pipe(gulpif(prod, cleanCss()))
-  .pipe(gulpif(!prod, sourcemaps.write()))
+  .pipe(gulpif(prod, sourcemaps.write()))
   .pipe(rename((parsedPath) => { parsedPath.extname = '.wxss'; }))
   .pipe(gulp.dest(config.dest)));
 
 // 处理wxss 文件
 let buildWxssSrc = config.source.wxss;
 gulp.task('buildWxss', () => gulp.src(buildWxssSrc, { base: config.base })
-  .pipe(changed(config.dest))
+  .pipe(newer(config.dest))
   .pipe(gulp.dest(config.dest)));
 
 // 处理图片
 let buildImageSrc = config.source.img;
 gulp.task('buildImage', () => gulp.src(buildImageSrc, { base: config.base })
-  .pipe(changed(config.dest))
+  .pipe(newer(config.dest))
   .pipe(plumber({
     errorHandler: (err) => {
       gutil.log(err.stack);
@@ -79,19 +115,18 @@ gulp.task('buildImage', () => gulp.src(buildImageSrc, { base: config.base })
 // 处理wxml
 let buildWxmlSrc = config.source.wxml;
 gulp.task('buildWxml', () => gulp.src(buildWxmlSrc, { base: config.base })
-  .pipe(changed(config.dest))
+  .pipe(newer(config.dest))
   .pipe(plumber({
     errorHandler: (err) => {
       gutil.log(err.stack);
     },
   }))
-  .pipe(gulpif(prod, htmlmin()))
   .pipe(gulp.dest(config.dest)));
 
 // 处理json
 let buildJsonSrc = config.source.json;
 gulp.task('buildJson', () => gulp.src(buildJsonSrc, { base: config.base })
-  .pipe(changed(config.dest))
+  .pipe(newer(config.dest))
   .pipe(gulp.dest(config.dest)));
 
 gulp.task('buildContent', (cb) => {
@@ -108,8 +143,7 @@ gulp.task('watch', gulpSequence('buildContent', () => {
     gulp.start('buildJs');
     gutil.log(`File ${res.history} was ${res.event}, tasks running ...`);
   });
-  watch(config.source.less, { debounceDelay: 200 }, (res) => {
-    buildLessSrc = [`${config.base}/${res.relative}`];
+  watch(config.src.less, { debounceDelay: 200 }, (res) => {
     gulp.start('buildLess');
     gutil.log(`File ${res.history} was ${res.event}, tasks running ...`);
   });

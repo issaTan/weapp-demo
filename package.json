@@ -32,16 +32,20 @@
     "gulp-changed": "^3.1.0",
     "gulp-clean-css": "^3.7.0",
     "gulp-eslint": "^4.0.0",
+    "gulp-filter": "^5.1.0",
     "gulp-htmlmin": "^3.0.0",
     "gulp-if": "^2.0.2",
     "gulp-imagemin": "^3.3.0",
     "gulp-less": "^3.3.2",
+    "gulp-newer": "^1.4.0",
+    "gulp-notify": "^3.2.0",
     "gulp-plumber": "^1.1.0",
     "gulp-rename": "^1.2.2",
     "gulp-sequence": "^0.4.6",
     "gulp-sourcemaps": "^2.6.0",
     "gulp-uglify": "^3.0.0",
     "gulp-util": "^3.0.8",
-    "gulp-watch": "^4.3.11"
+    "gulp-watch": "^4.3.11",
+    "through2": "^2.0.3"
   }
 }
