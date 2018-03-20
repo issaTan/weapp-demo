@@ -8,8 +8,9 @@ const plumber = require('gulp-plumber');
 const gutil = require('gulp-util');
 const del = require('del');
 const less = require('gulp-less');
-const cleanCss = require('gulp-clean-css');
+const replace = require('gulp-replace');
 const base64 = require('gulp-base64');
+const cleanCss = require('gulp-clean-css');
 const sourcemaps = require('gulp-sourcemaps');
 const rename = require('gulp-rename');
 const eslint = require('gulp-eslint');
@@ -83,12 +84,14 @@ gulp.task('buildJs', () => gulp.src(buildJsSrc, { base: config.base })
 // 处理less文件
 const sourceLessSrc = config.source.less;
 const buildLessSrc = config.src.less;
-gulp.task('buildLess', () => gulp.src(sourceLessSrc, { base: config.base })
-  .pipe(filter(buildLessSrc))
+
+gulp.task('buildLess', () => gulp.src(buildLessSrc, { base: config.base })
+  .pipe(filter(sourceLessSrc))
   .pipe(gulpif(prod, sourcemaps.init()))
   .pipe(plumber({ errorHandler: notify.onError('Error:<%= error.message %>') }))
   .pipe(less({ relativeUrls: true }))
-  .pipe(base64({ extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg'], maxImageSize: 10000, debug: true }))
+  .pipe(replace(/px/g, 'rpx'))
+  .pipe(base64({ extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg'], maxImageSize: 10000, debug: false }))
   .pipe(gulpif(prod, cleanCss()))
   .pipe(gulpif(prod, sourcemaps.write()))
   .pipe(rename((parsedPath) => { parsedPath.extname = '.wxss'; }))
